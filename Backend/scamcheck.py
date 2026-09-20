@@ -1,6 +1,12 @@
-import re, json, requests
-from groq import Groq
+import re
+import json
+import requests
 import os
+
+from dotenv import load_dotenv
+from groq import Groq
+
+load_dotenv()
 
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
@@ -68,7 +74,7 @@ Return JSON only, no markdown fences:
 Posting: \"\"\"{text}\"\"\""""
 
     resp = client.chat.completions.create(
-        model="qwen/qwen3-32b",
+        model="openai/gpt-oss-120b",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.2,
     )
