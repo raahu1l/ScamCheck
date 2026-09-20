@@ -1,8 +1,11 @@
 import re
 import json
-import requests
 import os
+import requests
+import ipaddress
+import socket
 
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 from groq import Groq
 
@@ -36,21 +39,93 @@ def check_structural_pattern(text):
     }
 
 def check_technical_signals(text):
-    email_match = re.search(r'[\w\.-]+@[\w\.-]+', text)
+    email_match = re.search(
+        r'[\w\.-]+@[\w\.-]+',
+        text
+    )
+
     if not email_match:
-        return {"flag": False, "note": "no contact email found in text"}
+        return {
+            "flag": False,
+            "note": "no contact email found in text"
+        }
+
     domain = email_match.group(0).split('@')[-1]
-    generic = domain.lower() in ['gmail.com','yahoo.com','outlook.com','hotmail.com']
-    return {"flag": generic, "note": f"contact via {domain}"}
+
+    generic = domain.lower() in [
+        "gmail.com",
+        "yahoo.com",
+        "outlook.com",
+        "hotmail.com"
+    ]
+
+    return {
+        "flag": generic,
+        "note": f"contact via {domain}"
+    }
+
+def validate_url(url):
+    try:
+        parsed = urlparse(url)
+
+        if parsed.scheme not in ("http", "https"):
+            return False, "Only HTTP and HTTPS URLs are allowed."
+
+        if not parsed.hostname:
+            return False, "Invalid URL."
+
+        hostname = parsed.hostname.lower()
+
+        if hostname in {
+            "localhost",
+            "localhost.localdomain"
+        }:
+            return False, "Local URLs are not allowed."
+
+        try:
+            addresses = socket.getaddrinfo(
+                hostname,
+                None,
+                type=socket.SOCK_STREAM
+            )
+
+            for address in addresses:
+                ip = ipaddress.ip_address(address[4][0])
+
+                if (
+                    ip.is_private
+                    or ip.is_loopback
+                    or ip.is_link_local
+                    or ip.is_multicast
+                    or ip.is_reserved
+                    or ip.is_unspecified
+                ):
+                    return False, "Private or internal network URLs are not allowed."
+
+        except socket.gaierror:
+            return False, "Could not resolve the URL."
+
+        return True, ""
+
+    except Exception:
+        return False, "Invalid URL."
+
+def safe_get(url, timeout=8):
+    valid, error = validate_url(url)
+
+    if not valid:
+        raise ValueError(error)
+
+    return requests.get(
+        url,
+        timeout=timeout,
+        headers={"User-Agent": "Mozilla/5.0"},
+        allow_redirects=False
+    )
 
 def scrape_google_form(url):
     try:
-        resp = requests.get(
-            url,
-            timeout=8,
-            headers={"User-Agent": "Mozilla/5.0"},
-            allow_redirects=True
-        )
+        resp = safe_get(url)
 
         if resp.status_code >= 400:
             return {
@@ -92,7 +167,8 @@ def scrape_google_form(url):
         ]
 
         hits = [
-            q for q in questions
+            q
+            for q in questions
             if any(term in q.lower() for term in red_flag_terms)
         ]
 
@@ -108,6 +184,14 @@ def scrape_google_form(url):
             "error": "Could not access the form.",
             "all_questions": []
         }
+
+    except ValueError as e:
+        return {
+            "flag": False,
+            "error": str(e),
+            "all_questions": []
+        }
+
     except Exception:
         return {
             "flag": False,
@@ -119,19 +203,22 @@ def scrape_generic_page(url):
     from bs4 import BeautifulSoup
 
     try:
-        resp = requests.get(
-            url,
-            timeout=8,
-            headers={"User-Agent": "Mozilla/5.0"},
-            allow_redirects=True
-        )
+        resp = safe_get(url)
 
         if resp.status_code >= 400:
             return ""
 
-        soup = BeautifulSoup(resp.text, "html.parser")
+        soup = BeautifulSoup(
+            resp.text,
+            "html.parser"
+        )
 
-        for tag in soup(["script", "style", "nav", "footer"]):
+        for tag in soup([
+            "script",
+            "style",
+            "nav",
+            "footer"
+        ]):
             tag.decompose()
 
         return soup.get_text(
@@ -141,15 +228,21 @@ def scrape_generic_page(url):
 
     except requests.RequestException:
         return ""
+
+    except ValueError:
+        return ""
+
     except Exception:
         return ""
 
 def call_groq_contextual(text, a_result, b_result):
     prompt = f"""You are given a job/internship posting and two pre-computed signal checks (weak, non-decisive alone):
+
 - structural_pattern: {json.dumps(a_result)}
 - technical_signal: {json.dumps(b_result)}
 
 Analyze ONLY these contextual signals:
+
 1. payment_context: none / reasonable-refundable-official / suspicious-personal-account
 2. urgency_language: normal / artificial-pressure
 3. description_specificity: concrete-duties / vague-buzzwords
@@ -157,6 +250,7 @@ Analyze ONLY these contextual signals:
 5. referral_incentive: none / present
 
 Return JSON only, no markdown fences:
+
 {{
   "contextual_flag": true or false,
   "flags_triggered": ["reason: explanation"],
@@ -166,34 +260,57 @@ Return JSON only, no markdown fences:
 
 Posting: \"\"\"{text}\"\"\""""
 
-    resp = client.chat.completions.create(
-        model="openai/gpt-oss-120b",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-    )
-    raw = resp.choices[0].message.content.strip()
-    raw = re.sub(r'^```json\s*|\s*```$', '', raw)
     try:
+        resp = client.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.2,
+        )
+
+        raw = resp.choices[0].message.content.strip()
+
+        raw = re.sub(
+            r'^```json\s*|\s*```$',
+            '',
+            raw
+        )
+
         return json.loads(raw)
+
     except json.JSONDecodeError:
-        return {"contextual_flag": False, "flags_triggered": ["parse_error"], "follow_up_question": "", "advice": ""}
+        return {
+            "contextual_flag": False,
+            "flags_triggered": ["parse_error"],
+            "follow_up_question": "",
+            "advice": ""
+        }
 
 def fuse_verdict(a_flag, b_flag, c_flag):
-    flags = sum([a_flag, b_flag, c_flag])
+    flags = sum([
+        a_flag,
+        b_flag,
+        c_flag
+    ])
+
     if (a_flag and c_flag) or flags >= 2:
         return "High Risk"
+
     elif flags == 1:
         return "Caution"
+
     return "Likely Safe"
 
 def analyze_input(input_type, content, url=None):
-    # Collect text from the user and/or the supplied URL
     text_parts = []
 
     if content:
         text_parts.append(content)
 
-    # If a URL is supplied, inspect it
     if url:
         if "docs.google.com/forms" in url:
             url_result = scrape_google_form(url)
@@ -204,8 +321,8 @@ def analyze_input(input_type, content, url=None):
                     + str(url_result["all_questions"])
                 )
 
-            # Google Form payment/referral findings are a technical signal
             url_technical = url_result
+
         else:
             scraped_text = scrape_generic_page(url)
 
@@ -215,10 +332,10 @@ def analyze_input(input_type, content, url=None):
             url_technical = check_technical_signals(
                 scraped_text if scraped_text else ""
             )
+
     else:
         url_technical = None
 
-    # We need at least some content to analyze
     if not text_parts:
         return {
             "error": "Please provide posting text or an application URL."
@@ -226,13 +343,10 @@ def analyze_input(input_type, content, url=None):
 
     text_for_llm = "\n\n".join(text_parts)
 
-    # Category A — Structural
     a_result = check_structural_pattern(text_for_llm)
 
-    # Category B — Technical
     text_technical = check_technical_signals(text_for_llm)
 
-    # Combine technical evidence from text + URL
     b_flag = text_technical["flag"]
 
     if url_technical:
@@ -244,14 +358,12 @@ def analyze_input(input_type, content, url=None):
         "url_signal": url_technical
     }
 
-    # Category C — Contextual LLM
     c_result = call_groq_contextual(
         text_for_llm,
         a_result,
         b_result
     )
 
-    # Deterministic fusion remains the final authority
     verdict = fuse_verdict(
         a_result["flag"],
         b_result["flag"],
