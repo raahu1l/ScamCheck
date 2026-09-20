@@ -12,7 +12,13 @@ CORS(app)
 @app.route("/analyze", methods=["POST"])
 def analyze():
     data = request.get_json()
-    result = analyze_input(data.get("type"), data.get("content"))
+
+    result = analyze_input(
+        data.get("type"),
+        data.get("content"),
+        data.get("url")
+    )
+
     return jsonify(result)
 
 @app.route("/", methods=["GET"])

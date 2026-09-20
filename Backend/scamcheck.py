@@ -93,21 +93,77 @@ def fuse_verdict(a_flag, b_flag, c_flag):
         return "Caution"
     return "Likely Safe"
 
-def analyze_input(input_type, content):
-    if input_type == "url":
-        if "docs.google.com/forms" in content:
-            b_result = scrape_google_form(content)
-            text_for_llm = f"Google Form fields: {b_result.get('all_questions', [])}"
-        else:
-            text_for_llm = scrape_generic_page(content)
-            b_result = check_technical_signals(text_for_llm)
-    else:
-        text_for_llm = content
-        b_result = check_technical_signals(text_for_llm)
+def analyze_input(input_type, content, url=None):
+    # Collect text from the user and/or the supplied URL
+    text_parts = []
 
+    if content:
+        text_parts.append(content)
+
+    # If a URL is supplied, inspect it
+    if url:
+        if "docs.google.com/forms" in url:
+            url_result = scrape_google_form(url)
+
+            if url_result.get("all_questions"):
+                text_parts.append(
+                    "Google Form fields: "
+                    + str(url_result["all_questions"])
+                )
+
+            # Google Form payment/referral findings are a technical signal
+            url_technical = url_result
+        else:
+            scraped_text = scrape_generic_page(url)
+
+            if scraped_text:
+                text_parts.append(scraped_text)
+
+            url_technical = check_technical_signals(
+                scraped_text if scraped_text else ""
+            )
+    else:
+        url_technical = None
+
+    # We need at least some content to analyze
+    if not text_parts:
+        return {
+            "error": "Please provide posting text or an application URL."
+        }
+
+    text_for_llm = "\n\n".join(text_parts)
+
+    # Category A — Structural
     a_result = check_structural_pattern(text_for_llm)
-    c_result = call_groq_contextual(text_for_llm, a_result, b_result)
-    verdict = fuse_verdict(a_result["flag"], b_result["flag"], c_result["contextual_flag"])
+
+    # Category B — Technical
+    text_technical = check_technical_signals(text_for_llm)
+
+    # Combine technical evidence from text + URL
+    b_flag = text_technical["flag"]
+
+    if url_technical:
+        b_flag = b_flag or url_technical.get("flag", False)
+
+    b_result = {
+        "flag": b_flag,
+        "text_signal": text_technical,
+        "url_signal": url_technical
+    }
+
+    # Category C — Contextual LLM
+    c_result = call_groq_contextual(
+        text_for_llm,
+        a_result,
+        b_result
+    )
+
+    # Deterministic fusion remains the final authority
+    verdict = fuse_verdict(
+        a_result["flag"],
+        b_result["flag"],
+        c_result["contextual_flag"]
+    )
 
     return {
         "verdict": verdict,
