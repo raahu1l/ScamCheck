@@ -1,0 +1,9 @@
+node_modules/
+__pycache__/
+.env
+.env.example
+*.pyc
+dist/
+.DS_Store
+Backend/data/postings.csv
+Backend/data/job_skills.csv

@@ -1,0 +1,111 @@
+import re, json, requests
+from groq import Groq
+import os
+
+client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+
+SCAM_TEMPLATE_MARKERS = [
+    r"welcome letter", r"batch code", r"annexure\s*[-–]\s*[ab]",
+    r"to confirm your enrol?ment", r"flexible joining date",
+    r"selected for the internship program",
+    r"refer\s+(a\s+)?friend", r"referral\s+(bonus|reward|code)",
+]
+
+def check_structural_pattern(text):
+    text_l = text.lower()
+    hits = [m for m in SCAM_TEMPLATE_MARKERS if re.search(m, text_l)]
+    return {"flag": len(hits) >= 2, "matched": hits}
+
+def check_technical_signals(text):
+    email_match = re.search(r'[\w\.-]+@[\w\.-]+', text)
+    if not email_match:
+        return {"flag": False, "note": "no contact email found in text"}
+    domain = email_match.group(0).split('@')[-1]
+    generic = domain.lower() in ['gmail.com','yahoo.com','outlook.com','hotmail.com']
+    return {"flag": generic, "note": f"contact via {domain}"}
+
+def scrape_google_form(url):
+    resp = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+    match = re.search(r'FB_PUBLIC_LOAD_DATA_\s*=\s*(\[.*?\]);', resp.text, re.DOTALL)
+    if not match:
+        return {"flag": False, "error": "could not parse form", "all_questions": []}
+    raw = match.group(1)
+    questions = re.findall(r'"([^"]{5,200})"', raw)
+    red_flag_terms = ["upi", "payment screenshot", "transaction id", "amount paid",
+                       "utr number", "bank account", "registration fee",
+                       "refer a friend", "referral code"]
+    hits = [q for q in questions if any(t in q.lower() for t in red_flag_terms)]
+    return {"flag": len(hits) > 0, "matched_fields": hits, "all_questions": questions[:15]}
+
+def scrape_generic_page(url):
+    from bs4 import BeautifulSoup
+    resp = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+    soup = BeautifulSoup(resp.text, "html.parser")
+    for tag in soup(["script", "style", "nav", "footer"]):
+        tag.decompose()
+    return soup.get_text(separator=" ", strip=True)[:5000]
+
+def call_groq_contextual(text, a_result, b_result):
+    prompt = f"""You are given a job/internship posting and two pre-computed signal checks (weak, non-decisive alone):
+- structural_pattern: {json.dumps(a_result)}
+- technical_signal: {json.dumps(b_result)}
+
+Analyze ONLY these contextual signals:
+1. payment_context: none / reasonable-refundable-official / suspicious-personal-account
+2. urgency_language: normal / artificial-pressure
+3. description_specificity: concrete-duties / vague-buzzwords
+4. recruitment_process: real-interview-mentioned / instant-selection-no-process
+5. referral_incentive: none / present
+
+Return JSON only, no markdown fences:
+{{
+  "contextual_flag": true or false,
+  "flags_triggered": ["reason: explanation"],
+  "follow_up_question": "one specific verification question",
+  "advice": "1-2 sentences"
+}}
+
+Posting: \"\"\"{text}\"\"\""""
+
+    resp = client.chat.completions.create(
+        model="qwen/qwen3-32b",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.2,
+    )
+    raw = resp.choices[0].message.content.strip()
+    raw = re.sub(r'^```json\s*|\s*```$', '', raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {"contextual_flag": False, "flags_triggered": ["parse_error"], "follow_up_question": "", "advice": ""}
+
+def fuse_verdict(a_flag, b_flag, c_flag):
+    flags = sum([a_flag, b_flag, c_flag])
+    if (a_flag and c_flag) or flags >= 2:
+        return "High Risk"
+    elif flags == 1:
+        return "Caution"
+    return "Likely Safe"
+
+def analyze_input(input_type, content):
+    if input_type == "url":
+        if "docs.google.com/forms" in content:
+            b_result = scrape_google_form(content)
+            text_for_llm = f"Google Form fields: {b_result.get('all_questions', [])}"
+        else:
+            text_for_llm = scrape_generic_page(content)
+            b_result = check_technical_signals(text_for_llm)
+    else:
+        text_for_llm = content
+        b_result = check_technical_signals(text_for_llm)
+
+    a_result = check_structural_pattern(text_for_llm)
+    c_result = call_groq_contextual(text_for_llm, a_result, b_result)
+    verdict = fuse_verdict(a_result["flag"], b_result["flag"], c_result["contextual_flag"])
+
+    return {
+        "verdict": verdict,
+        "structural": a_result,
+        "technical": b_result,
+        "contextual": c_result
+    }
