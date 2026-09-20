@@ -3,7 +3,7 @@ import "./App.css";
 import SkillInput from "./components/SkillInput";
 import ResultCard from "./components/ResultCard";
 
-const API_URL = "http://localhost:5000/analyze";
+const API_URL = "https://scamcheck-abxa.onrender.com/analyze";
 
 const WELLBRIDGE_SAMPLE = `Welcome Letter
 
