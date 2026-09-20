@@ -1,178 +1,134 @@
-# 🚀 SkillForge
+# ScamCheck
 
-### **AI-Powered Career Intelligence Platform**
+### Verify Before You Trust
 
-![React](https://img.shields.io/badge/React-Frontend-61DAFB?style=for-the-badge&logo=react&logoColor=black)
-![Flask](https://img.shields.io/badge/Flask-Backend-black?style=for-the-badge&logo=flask)
-![Qwen3](https://img.shields.io/badge/Qwen3-32B-purple?style=for-the-badge)
-![Groq](https://img.shields.io/badge/Groq-Inference-orange?style=for-the-badge)
-![AMD](https://img.shields.io/badge/AMD-MI300X-red?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-1.0.0-green?style=for-the-badge)
+AI-assisted scam-risk analysis for jobs, internships, and scholarship opportunities.
 
-> An AI-powered multi-agent platform that analyzes live job market data, identifies skill gaps, tracks market demand, and generates personalized learning roadmaps using Qwen3-32B and real-world job postings.
+🔗 **Live Demo:** https://scam-check-zeta.vercel.app/
 
 ---
 
-## 🎯 The Problem
+## 🚨 Problem
 
-Students and professionals often struggle with:
+Students frequently encounter fake internships, jobs, and scholarship opportunities that use:
 
-- Which skills are actually in demand?
-- Which jobs match their current skillset?
-- What should they learn next?
-- Which skills unlock more opportunities?
+- Registration or application fees
+- Requests for payment screenshots or transaction IDs
+- Instant-selection claims
+- Referral incentives
+- Suspicious forms and contact details
+- Urgency-based messaging
 
-Most platforms provide generic advice instead of real market-driven insights.
-
----
-
-## 💡 The Solution
-
-SkillForge uses live job market data and an AI-powered multi-agent workflow to:
-
-- Match users with relevant roles
-- Identify missing skills
-- Analyze real-world market demand
-- Generate personalized learning roadmaps
-- Recommend practical learning resources
-
-👉 Live Demo: https://ai-job-navigator-gamma.vercel.app/
+ScamCheck helps users analyze these opportunities before sharing personal information or making payments.
 
 ---
 
-## 🤖 Multi-Agent Workflow
+## 💡 Solution
 
-### 🔍 Agent 1 — Job Researcher
-Fetches live job postings using Adzuna APIs.
+ScamCheck combines multiple signals instead of relying on a single keyword or AI response.
 
-### 🧠 Agent 2 — Skill Extractor
-Uses Qwen3-32B to extract required skills from real-world job descriptions.
+### Multi-Signal Analysis
 
-### 📊 Agent 3 — Gap Analyzer
-Compares user skills against market requirements and calculates match scores.
+**1. Structural Signals**
+- Welcome-letter patterns
+- Batch codes
+- Annexure references
+- Instant selection language
+- Referral incentives
+- Flexible joining dates
 
-### 🎯 Agent 4 — Career Coach
-Generates personalized learning roadmaps, projects, and resource recommendations.
+**2. Technical Signals**
+- Contact email/domain analysis
+- Google Form field analysis
+- Payment-related fields
+- UPI / transaction ID / UTR requests
+- Registration fees
+- Referral codes
 
----
+**3. Contextual Signals**
+- AI-assisted analysis using Groq
+- Payment context
+- Urgency
+- Recruitment process
+- Referral patterns
 
-## 🧠 Why Qwen3-32B?
+Python-based deterministic rules combine these signals to produce:
 
-Qwen3-32B powers the intelligence layer of SkillForge.
-
-It was selected for:
-- Strong instruction-following
-- Reliable structured JSON generation
-- Accurate skill extraction from noisy job descriptions
-- High-quality reasoning for roadmap generation
-
----
-
-## 📱 Features
-
-### 🚀 Career Intelligence
-- Live job market analysis
-- AI-powered role matching
-- Skill gap identification
-- Match percentage scoring
-- Real-time market demand insights
-
-### 📚 Personalized Learning
-- AI-generated learning roadmaps
-- Recommended websites & resources
-- YouTube learning suggestions
-- Practice project recommendations
-- Estimated learning timelines
-
-### 📊 Market Insights
-- Top in-demand skills
-- Domain-based trend analysis
-- Live hiring pattern analysis
-- Opportunity expansion insights
+- 🟢 Likely Safe
+- 🟡 Caution
+- 🔴 High Risk
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer | Technology |
-|------|-----------|
-| Frontend | React + Vite |
-| Backend | Flask |
-| AI Model | Qwen3-32B |
-| Workflow | CrewAI-inspired Multi-Agent Pipeline |
-| APIs | Adzuna Job APIs |
-| Inference | Groq |
-| Charts | Recharts |
-| Deployment | Vercel + Render |
-| Infrastructure | AMD MI300X / ROCm-ready |
+### Frontend
+- React
+- Vite
+- CSS
+
+### Backend
+- Python
+- Flask
+- Gunicorn
+
+### AI
+- Groq API
+- LLM-based contextual reasoning
+
+### Analysis
+- BeautifulSoup
+- Regex-based detection
+- Google Forms parsing
+- URL validation
+- Deterministic risk fusion
 
 ---
 
-## 🚀 Getting Started
+## 🔄 How It Works
 
-### Frontend Setup
-
-```bash
-cd Frontend
-npm install
-npm run dev
-```
-
-### Backend Setup
-
-```bash
-cd Backend
-pip install -r requirements.txt
-python app.py
-```
-
----
-
-## 🔑 Environment Variables
-
-```env
-GROQ_API_KEY=
-ADZUNA_APP_ID=
-ADZUNA_APP_KEY=
+```text
+User Input
+    ↓
+Content / URL Analysis
+    ↓
+Signal Collection
+    ↓
+Structural + Technical + Contextual Analysis
+    ↓
+Deterministic Risk Fusion
+    ↓
+Risk Verdict + Evidence + Actionable Advice
 ```
 
 ---
 
-🔥 AMD Developer Cloud
+## 🎯 Use Cases
 
-SkillForge is architected for deployment on AMD MI300X GPU infrastructure with ROCm-compatible inference workflows.
-
-The live demo currently uses Groq-hosted inference APIs during development, while the codebase remains ready for direct AMD GPU deployment using vLLM.
-
---- 
-
-💡 Why This Project Matters
-
-SkillForge focuses on solving a real-world problem:
-
-Bridging the gap between:
-
-current user skills
-live market demand
-personalized career growth
-
-Instead of generic AI chat responses, the platform provides:
-
-actionable market intelligence
-real skill-gap analysis
-practical learning guidance
+- Internship verification
+- Job posting analysis
+- Scholarship opportunity checking
+- Suspicious Google Form analysis
+- Scam message analysis
 
 ---
 
-Developed with the assistance of AI tools to accelerate development, debugging, UI refinement, and workflow orchestration.
+## 🚀 Live Demo
+
+Try ScamCheck here:
+
+https://scam-check-zeta.vercel.app/
 
 ---
 
-## 👨‍💻 Author
+## ⚠️ Disclaimer
 
-**Rahul Walawalkar**  
-GitHub: https://github.com/raahu1l
+ScamCheck is a risk-analysis and verification assistant. It does not guarantee that an opportunity is legitimate or fraudulent. Users should independently verify organizations through official and trusted sources before sharing personal information or making payments.
 
 ---
 
-Built for the AMD Developer Hackathon 🚀
+## 👨‍💻 Built For
+
+**HACKDAY 1.0 — DECODEP**
+
+Theme: **Tech for a Better Tomorrow**
