@@ -44,25 +44,105 @@ def check_technical_signals(text):
     return {"flag": generic, "note": f"contact via {domain}"}
 
 def scrape_google_form(url):
-    resp = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
-    match = re.search(r'FB_PUBLIC_LOAD_DATA_\s*=\s*(\[.*?\]);', resp.text, re.DOTALL)
-    if not match:
-        return {"flag": False, "error": "could not parse form", "all_questions": []}
-    raw = match.group(1)
-    questions = re.findall(r'"([^"]{5,200})"', raw)
-    red_flag_terms = ["upi", "payment screenshot", "transaction id", "amount paid",
-                       "utr number", "bank account", "registration fee",
-                       "refer a friend", "referral code"]
-    hits = [q for q in questions if any(t in q.lower() for t in red_flag_terms)]
-    return {"flag": len(hits) > 0, "matched_fields": hits, "all_questions": questions[:15]}
+    try:
+        resp = requests.get(
+            url,
+            timeout=8,
+            headers={"User-Agent": "Mozilla/5.0"},
+            allow_redirects=True
+        )
+
+        if resp.status_code >= 400:
+            return {
+                "flag": False,
+                "error": "Could not access the form.",
+                "all_questions": []
+            }
+
+        match = re.search(
+            r'FB_PUBLIC_LOAD_DATA_\s*=\s*(\[.*?\]);',
+            resp.text,
+            re.DOTALL
+        )
+
+        if not match:
+            return {
+                "flag": False,
+                "error": "Could not parse form.",
+                "all_questions": []
+            }
+
+        raw = match.group(1)
+
+        questions = re.findall(
+            r'"([^"]{5,200})"',
+            raw
+        )
+
+        red_flag_terms = [
+            "upi",
+            "payment screenshot",
+            "transaction id",
+            "amount paid",
+            "utr number",
+            "bank account",
+            "registration fee",
+            "refer a friend",
+            "referral code"
+        ]
+
+        hits = [
+            q for q in questions
+            if any(term in q.lower() for term in red_flag_terms)
+        ]
+
+        return {
+            "flag": len(hits) > 0,
+            "matched_fields": hits,
+            "all_questions": questions[:15]
+        }
+
+    except requests.RequestException:
+        return {
+            "flag": False,
+            "error": "Could not access the form.",
+            "all_questions": []
+        }
+    except Exception:
+        return {
+            "flag": False,
+            "error": "Unexpected error while reading the form.",
+            "all_questions": []
+        }
 
 def scrape_generic_page(url):
     from bs4 import BeautifulSoup
-    resp = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
-    soup = BeautifulSoup(resp.text, "html.parser")
-    for tag in soup(["script", "style", "nav", "footer"]):
-        tag.decompose()
-    return soup.get_text(separator=" ", strip=True)[:5000]
+
+    try:
+        resp = requests.get(
+            url,
+            timeout=8,
+            headers={"User-Agent": "Mozilla/5.0"},
+            allow_redirects=True
+        )
+
+        if resp.status_code >= 400:
+            return ""
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        for tag in soup(["script", "style", "nav", "footer"]):
+            tag.decompose()
+
+        return soup.get_text(
+            separator=" ",
+            strip=True
+        )[:5000]
+
+    except requests.RequestException:
+        return ""
+    except Exception:
+        return ""
 
 def call_groq_contextual(text, a_result, b_result):
     prompt = f"""You are given a job/internship posting and two pre-computed signal checks (weak, non-decisive alone):
