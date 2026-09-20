@@ -82,9 +82,16 @@ export default function SkillInput({ onAnalyze, loading, onDemo, onClear }) {
       </div>
 
       {(content || url) && !loading && (
-        <button className="clear-btn" onClick={onClear}>
-          Clear
-        </button>
+        <button
+  className="clear-btn"
+  onClick={() => {
+    setContent("");
+    setUrl("");
+    onClear();
+  }}
+>
+  Clear
+</button>
       )}
     </section>
   );
