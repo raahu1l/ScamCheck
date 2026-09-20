@@ -131,7 +131,8 @@ def scrape_google_form(url):
             return {
                 "flag": False,
                 "error": "Could not access the form.",
-                "all_questions": []
+                "all_questions": [],
+                "matched_fields": []
             }
 
         match = re.search(
@@ -144,7 +145,8 @@ def scrape_google_form(url):
             return {
                 "flag": False,
                 "error": "Could not parse form.",
-                "all_questions": []
+                "all_questions": [],
+                "matched_fields": []
             }
 
         raw = match.group(1)
@@ -154,27 +156,62 @@ def scrape_google_form(url):
             raw
         )
 
-        red_flag_terms = [
-            "upi",
-            "payment screenshot",
-            "transaction id",
-            "amount paid",
-            "utr number",
-            "bank account",
-            "registration fee",
-            "refer a friend",
-            "referral code"
-        ]
-
-        hits = [
-            q
+        questions = list(dict.fromkeys(
+            q.strip()
             for q in questions
-            if any(term in q.lower() for term in red_flag_terms)
-        ]
+            if q.strip()
+        ))
+
+        evidence_patterns = {
+            "Payment screenshot requested": [
+                "payment screenshot",
+                "screenshot of payment",
+                "payment proof"
+            ],
+            "Transaction/UTR details requested": [
+                "transaction id",
+                "transaction number",
+                "utr number",
+                "utr",
+                "transaction details"
+            ],
+            "Amount paid requested": [
+                "amount paid",
+                "payment amount",
+                "amount you paid"
+            ],
+            "Bank details requested": [
+                "bank account",
+                "account number",
+                "bank details"
+            ],
+            "Registration fee requested": [
+                "registration fee",
+                "registration fees",
+                "application fee",
+                "joining fee"
+            ],
+            "Referral code requested": [
+                "referral code",
+                "refer a friend"
+            ]
+        }
+
+        matched_fields = []
+
+        for question in questions:
+            question_lower = question.lower()
+
+            for label, terms in evidence_patterns.items():
+                if any(term in question_lower for term in terms):
+                    matched_fields.append({
+                        "signal": label,
+                        "evidence": question
+                    })
 
         return {
-            "flag": len(hits) > 0,
-            "matched_fields": hits,
+            "flag": len(matched_fields) > 0,
+            "matched_fields": matched_fields,
             "all_questions": questions[:15]
         }
 
@@ -182,23 +219,26 @@ def scrape_google_form(url):
         return {
             "flag": False,
             "error": "Could not access the form.",
-            "all_questions": []
+            "all_questions": [],
+            "matched_fields": []
         }
 
     except ValueError as e:
         return {
             "flag": False,
             "error": str(e),
-            "all_questions": []
+            "all_questions": [],
+            "matched_fields": []
         }
 
     except Exception:
         return {
             "flag": False,
             "error": "Unexpected error while reading the form.",
-            "all_questions": []
+            "all_questions": [],
+            "matched_fields": []
         }
-
+        
 def scrape_generic_page(url):
     from bs4 import BeautifulSoup
 
@@ -236,29 +276,66 @@ def scrape_generic_page(url):
         return ""
 
 def call_groq_contextual(text, a_result, b_result):
-    prompt = f"""You are given a job/internship posting and two pre-computed signal checks (weak, non-decisive alone):
+    prompt = f"""You are analyzing a job, internship, scholarship, or recruitment posting.
 
-- structural_pattern: {json.dumps(a_result)}
-- technical_signal: {json.dumps(b_result)}
+Your job is to identify contextual risk signals using ONLY evidence explicitly present in the provided posting or form evidence.
 
-Analyze ONLY these contextual signals:
+Do not invent facts.
+Do not assume an organization is fraudulent.
+Do not treat Gmail, a Google Form, or any single weak signal as proof of fraud.
 
-1. payment_context: none / reasonable-refundable-official / suspicious-personal-account
-2. urgency_language: normal / artificial-pressure
-3. description_specificity: concrete-duties / vague-buzzwords
-4. recruitment_process: real-interview-mentioned / instant-selection-no-process
-5. referral_incentive: none / present
+Pre-computed structural signal:
+{json.dumps(a_result)}
 
-Return JSON only, no markdown fences:
+Pre-computed technical signal:
+{json.dumps(b_result)}
+
+Analyze these contextual dimensions:
+
+1. payment_context:
+   - none
+   - reasonable-refundable-official
+   - suspicious-personal-account
+
+2. urgency_language:
+   - normal
+   - artificial-pressure
+
+3. description_specificity:
+   - concrete-duties
+   - vague-buzzwords
+
+4. recruitment_process:
+   - real-interview-mentioned
+   - instant-selection-no-process
+
+5. referral_incentive:
+   - none
+   - present
+
+Evidence rules:
+
+- Every item in flags_triggered MUST include the exact evidence or a faithful short quote from the posting.
+- Do not create a flag unless the posting contains supporting evidence.
+- If evidence is insufficient, do not flag it.
+- Keep explanations concise.
+- The follow_up_question must ask for something the applicant can independently verify.
+
+Return JSON only:
 
 {{
   "contextual_flag": true or false,
-  "flags_triggered": ["reason: explanation"],
+  "flags_triggered": [
+    "signal: evidence from posting"
+  ],
   "follow_up_question": "one specific verification question",
-  "advice": "1-2 sentences"
+  "advice": "1-2 sentences based only on the available evidence"
 }}
 
-Posting: \"\"\"{text}\"\"\""""
+Posting and extracted evidence:
+
+\"\"\"{text}\"\"\"
+"""
 
     try:
         resp = client.chat.completions.create(
@@ -285,9 +362,17 @@ Posting: \"\"\"{text}\"\"\""""
     except json.JSONDecodeError:
         return {
             "contextual_flag": False,
-            "flags_triggered": ["parse_error"],
+            "flags_triggered": ["Could not parse contextual analysis."],
             "follow_up_question": "",
-            "advice": ""
+            "advice": "The contextual analysis could not be parsed."
+        }
+
+    except Exception as e:
+        return {
+            "contextual_flag": False,
+            "flags_triggered": ["Contextual analysis unavailable."],
+            "follow_up_question": "Can you verify the opportunity directly through the organization's official website?",
+            "advice": "Contextual AI analysis was unavailable, so verify the opportunity independently before proceeding."
         }
 
 def fuse_verdict(a_flag, b_flag, c_flag):
@@ -319,6 +404,12 @@ def analyze_input(input_type, content, url=None):
                 text_parts.append(
                     "Google Form fields: "
                     + str(url_result["all_questions"])
+                )
+
+            if url_result.get("matched_fields"):
+                text_parts.append(
+                    "Google Form evidence: "
+                    + str(url_result["matched_fields"])
                 )
 
             url_technical = url_result
