@@ -41,9 +41,15 @@ export default function ResultCard({ result }) {
       title: "Contextual reasoning",
       flag: contextual.contextual_flag,
       details:
-        contextual.flags_triggered?.length
-          ? contextual.flags_triggered.join(" • ")
-          : "No significant contextual red flags detected.",
+  contextual.flags_triggered?.length ? (
+    <ul className="reason-list">
+      {contextual.flags_triggered.map((reason, index) => (
+        <li key={index}>{reason}</li>
+      ))}
+    </ul>
+  ) : (
+    "No significant contextual red flags detected."
+  ),
     },
   ];
 

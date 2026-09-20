@@ -10,17 +10,30 @@ load_dotenv()
 
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-SCAM_TEMPLATE_MARKERS = [
-    r"welcome letter", r"batch code", r"annexure\s*[-–]\s*[ab]",
-    r"to confirm your enrol?ment", r"flexible joining date",
-    r"selected for the internship program",
-    r"refer\s+(a\s+)?friend", r"referral\s+(bonus|reward|code)",
-]
+SCAM_TEMPLATE_MARKERS = {
+    "Welcome letter language": r"welcome letter",
+    "Batch code": r"batch code",
+    "Annexure A/B": r"annexure\s*[-–]\s*[ab]",
+    "Enrolment confirmation request": r"to confirm your enrol?ment",
+    "Flexible joining date": r"flexible joining date",
+    "Instant selection language": r"selected for the internship program",
+    "Referral incentive": r"refer\s+(a\s+)?friend",
+    "Referral bonus/reward": r"referral\s+(bonus|reward|code)",
+}
 
 def check_structural_pattern(text):
     text_l = text.lower()
-    hits = [m for m in SCAM_TEMPLATE_MARKERS if re.search(m, text_l)]
-    return {"flag": len(hits) >= 2, "matched": hits}
+
+    hits = [
+        label
+        for label, pattern in SCAM_TEMPLATE_MARKERS.items()
+        if re.search(pattern, text_l)
+    ]
+
+    return {
+        "flag": len(hits) >= 2,
+        "matched": hits
+    }
 
 def check_technical_signals(text):
     email_match = re.search(r'[\w\.-]+@[\w\.-]+', text)
