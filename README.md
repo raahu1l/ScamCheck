@@ -113,14 +113,6 @@ Risk Verdict + Evidence + Actionable Advice
 
 ---
 
-## 🚀 Live Demo
-
-Try ScamCheck here:
-
-https://scam-check-zeta.vercel.app/
-
----
-
 ## ⚠️ Disclaimer
 
 ScamCheck is a risk-analysis and verification assistant. It does not guarantee that an opportunity is legitimate or fraudulent. Users should independently verify organizations through official and trusted sources before sharing personal information or making payments.
